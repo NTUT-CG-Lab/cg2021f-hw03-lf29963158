@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js webgl - loaders - MMD loader</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+	<style>
+		body {
+			background-color: #fff;
+			color: #444;
+		}
+
+		a {
+			color: #08f;
+		}
+	</style>
+</head>
+
+<body oncontextmenu="return false;">
+	<div id="info"></div>
+
+	<script src="js/libs/ammo.wasm.js"></script>
+	<script src="scoreoutputer.min.js"></script>
+	<script>
+		// 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
+		// 以下面範例，檔名就為 "109598105(總分: 6).csv"
+		var so = new ScoreOutputer("110598047");
+		so.installCSS(function () {
+			// 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
+			// installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
+
+			//加入項目，分數，完成狀況
+			//第一個參數為 項目名稱
+			//第2個參數為 項目分數
+			//第3個參數為 完成狀況，有完成 true/未完成 false
+			//有幾個項目就呼叫幾個 addChild
+			//addChild 要比 renderModal 先呼叫
+			so.addChild("繪製出 5 個畫面", 1, true);
+			so.addChild("回答問題", 1, true);
+			so.addChild("可按鍵選擇上 / 下一隻角色", 1, true);
+			so.addChild("讀取作業 2 儲存的座標點在眼睛上繪製出分割線", 1, true);
+			so.addChild("可選擇當下控制哪個虹膜", 1, true);
+			so.addChild("按滑鼠左鍵控制虹膜移動，右鍵停止", 2, true);
+			so.addChild("複製參數至對應目標參數", 2, true);
+			so.addChild("可儲存虹膜轉動角度", 1, true);
+
+			//產生自評表，參數如下所示
+			so.renderModal(
+				//1. 自評表插入位置 (預設 document.body)
+				document.body,
+				//2. 自評表背景 (預設紅色)
+				'rgba(100,45,58,1)',
+				//3. 自評表文字顏色 (預設白色)
+				'white',
+				//4. 自評表文字大小 (預設 14pt)
+				'15pt',
+				//5. 自評表 checkbox 文字大小 (預設多少忘了)
+				'15px',
+				//6. 自評表標題 (預設 "自我評分表")
+				dialogTitle = "自我評分表"
+			);
+
+			//設定下載按鈕 <-- 一定要呼叫這個函數，不然沒有下載功能
+			so.installDownloadBtn();
+
+			//產生 "開啟自評表按鈕"
+			so.renderBtn(
+				//自評表按鈕插入位置
+				document.querySelector("#info"),
+				//自評表按鈕文字
+				"開啟自評表"
+			);
+		});
+	</script>
+	<script type="module">
+
+		import * as THREE from './three.js-dev/build/three.module.js';
+		import { GUI } from './three.js-dev/examples/jsm/libs/dat.gui.module.js';
+		import { OrbitControls } from './three.js-dev/examples/jsm/controls/OrbitControls.js';
+		import { OutlineEffect } from './three.js-dev/examples/jsm/effects/OutlineEffect.js';
+		import { MMDLoader } from './three.js-dev/examples/jsm/loaders/MMDLoader.js';
+		import { MMDAnimationHelper } from './three.js-dev/examples/jsm/animation/MMDAnimationHelper.js';
+		import * as SkeletonUtils  from './three.js-dev/examples/jsm/utils/SkeletonUtils.js';
+		import {Labels} from './labels.js'
+
+		let leftScene,scene, scene1, scene2, scene3, renderer, effect;
+		let mesh, mesh1, mesh2, mesh3, helper;
+		let SCREEN_WIDTH = window.innerWidth;
+		let SCREEN_HEIGHT = window.innerHeight;
+		let aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+		let frustumSize = 8;
+		let camera, camera2, camera3, camera4, camera5;
+
+		let modelIndex = 0, eyeIndex = 0;
+		let modelexist = false;
+		let modelArray = new Array(3); //save mesh
+		let sceneArray = new Array(3); //save scene
+		let labelArray = new Array(3);
+
+		let isMouseDown = false;
+		let clientCoordinate = new Array(2);
+
+		const output = new Array(3);
+
+		var loadedmodelJSON;
+		let jsonModelMinMaxArray = new Array(3);
+		for(let i = 0; i < 3; i++){
+			jsonModelMinMaxArray[i] = new Array(4);  //[xMin, xMax, yMin, yMax]
+		}
+		
+		// let temp = new THREE.Vector3();
+
+		for(let i = 0; i < 3; i++){
+			modelArray[i] = new Array(4);
+		}
+
+		for(let i = 0; i < 3; i++){
+
+			sceneArray[i] = new Array(4);
+			for(let j = 0; j < 4; j++){
+				let tempscene = new THREE.Scene();
+				let tempambient = new THREE.AmbientLight(0x666666);
+				tempscene.add(tempambient);
+
+				const directionalLight = new THREE.DirectionalLight(0x887766);
+				directionalLight.position.set(- 1, 1, 1).normalize();
+				tempscene.add(directionalLight);
+				sceneArray[i][j] = tempscene;
+			}
+
+		}
+
+		let eyeArray = new Array(3);
+
+		for(let i = 0; i < 3; i++){
+			eyeArray[i] = new Array(8);
+		}
+
+		let eyeOffset = new Array(3);
+
+		for(let i = 0; i < 3; i++){
+			eyeOffset[i] = new Array(2);
+			eyeOffset[i][0] = new THREE.Vector3(0,0,0);	//單眼
+			eyeOffset[i][1] = new THREE.Vector3(0,0,0);	//雙眼
+		}
+
+
+		const modelFile = ['models/mmd/kizunaai/kizunaai.pmx', 'models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx', 'models/mmd/るいのれ式物述有栖_配布用フォルダ/物述有栖.pmx'];
+		
+
+		Ammo().then(function (AmmoLib) {
+
+			Ammo = AmmoLib;
+
+			init();
+			animate();
+
+		});
+
+		document.addEventListener("keydown", onDocumentKeyDown, false);
+		document.addEventListener("mousedown", mouseDown, false);
+		document.addEventListener("mousemove", mouseMove, false);
+
+		function init() {
+
+			const container = document.createElement('div');
+			document.body.appendChild(container);
+			camera = new THREE.OrthographicCamera(0.5 * frustumSize * aspect / - 2, 0.5 * frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 0.1, 1000);
+			camera2 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera3 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera4 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera5 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera.position.z = 30;
+			camera2.position.z = 30;
+			camera3.position.z = 30;
+			camera4.position.z = 30;
+			camera5.position.z = 30;
+
+			
+
+			// scene
+
+			scene = new THREE.Scene();
+			const ambient = new THREE.AmbientLight(0x666666);
+			scene.add(ambient);
+
+			const directionalLight = new THREE.DirectionalLight(0x887766);
+			directionalLight.position.set(- 1, 1, 1).normalize();
+			scene.add(directionalLight);
+
+			scene1 = new THREE.Scene();
+			const ambient1 = new THREE.AmbientLight(0x666666);
+			scene1.add(ambient1);
+
+			const directionalLight1 = new THREE.DirectionalLight(0x887766);
+			directionalLight1.position.set(- 1, 1, 1).normalize();
+			scene1.add(directionalLight1);
+
+			scene2 = new THREE.Scene();
+			const ambient2 = new THREE.AmbientLight(0x666666);
+			scene2.add(ambient2);
+
+			const directionalLight2 = new THREE.DirectionalLight(0x887766);
+			directionalLight2.position.set(- 1, 1, 1).normalize();
+			scene2.add(directionalLight2);
+
+			scene3 = new THREE.Scene();
+			const ambient3 = new THREE.AmbientLight(0x666666);
+			scene3.add(ambient3);
+
+			const directionalLight3 = new THREE.DirectionalLight(0x887766);
+			directionalLight3.position.set(- 1, 1, 1).normalize();
+			scene3.add(directionalLight3);
+
+			leftScene = sceneArray[modelIndex][0];
+
+			//
+
+			renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			container.appendChild(renderer.domElement);
+			renderer.autoClear = false;
+			effect = new OutlineEffect(renderer);
+
+			// model
+			function onProgress(xhr) {
+
+				if (xhr.lengthComputable) {
+
+					const percentComplete = xhr.loaded / xhr.total * 100;
+					console.log(Math.round(percentComplete, 2) + '% downloaded');
+
+				}
+
+			}
+
+			// const modelFile = 'models/mmd/kizunaai/kizunaai.pmx';
+
+			helper = new MMDAnimationHelper();
+			const loader = new MMDLoader();
+
+			var loadModel = function (object, loadIndex) {
+
+				const clone = SkeletonUtils.clone(object);
+				mesh = clone;
+				//console.log(clone);
+				mesh.position.y = - 10;
+
+				const clone1 = SkeletonUtils.clone(object);
+				mesh1 = clone1;
+				mesh1.position.y = - 10;
+
+				const clone2 = SkeletonUtils.clone(object);
+				mesh2 = clone2;
+				mesh2.position.y = - 10;
+
+				const clone3 = SkeletonUtils.clone(object);
+				mesh3 = clone3;
+				mesh3.position.y = - 10;
+
+				modelArray[loadIndex][0] = mesh;
+				eyeArray[loadIndex][0] = putEyetoArray(mesh, false); //右目 EX:[右,左,右,左,右,左,右,左]
+				eyeArray[loadIndex][1] = putEyetoArray(mesh, true);
+				modelArray[loadIndex][1] = mesh1;
+				eyeArray[loadIndex][2] = putEyetoArray(mesh1, false);
+				eyeArray[loadIndex][3] = putEyetoArray(mesh1, true);
+				modelArray[loadIndex][2] = mesh2;
+				eyeArray[loadIndex][4] = putEyetoArray(mesh2, false);
+				eyeArray[loadIndex][5] = putEyetoArray(mesh2, true);
+				modelArray[loadIndex][3] = mesh3;
+				eyeArray[loadIndex][6] = putEyetoArray(mesh3, false);
+				eyeArray[loadIndex][7] = putEyetoArray(mesh3, true);
+
+				let single = new THREE.Vector3(0,0,0);	//單眼
+				single = single.add(getWorldPosition(eyeArray[loadIndex][0].children[0]));
+				eyeOffset[loadIndex][0] = single;
+
+				let mid = new THREE.Vector3(0,0,0);	//雙眼中間
+				mid = mid.add(getWorldPosition(eyeArray[loadIndex][0]));
+				mid = mid.add(getWorldPosition(eyeArray[loadIndex][1]));
+				mid = mid.multiplyScalar(0.5);
+				//console.log(temp);
+				eyeOffset[loadIndex][1] = mid;
+
+				// if(!modelexist){
+				// 	scene.add(mesh);
+				// 	scene1.add(mesh1);
+				// 	scene2.add(mesh2);
+				// 	scene3.add(mesh3);
+				// 	modelexist = true;
+				// 	onWindowResize();
+				// }
+				sceneArray[loadIndex][0].add(modelArray[loadIndex][0]);
+				sceneArray[loadIndex][1].add(modelArray[loadIndex][1]);
+				sceneArray[loadIndex][2].add(modelArray[loadIndex][2]);
+				sceneArray[loadIndex][3].add(modelArray[loadIndex][3]);
+				onWindowResize();
+			}
+
+			for( let i = 0; i < modelFile.length; i++){
+				loader.load(modelFile[i], (obj) => {loadModel(obj, i)
+					// console.log(modelArray);
+					// temp.add(eyeArray[i][0].position);
+					// temp.add(eyeArray[i][1].position);
+					// temp.multiplyScalar(0.5);
+					// console.log(temp);
+				}, onProgress, null);
+			}
+
+			//onWindowResize();
+
+			//
+
+			window.addEventListener('resize', function(){
+				onWindowResize();
+			}) ;
+			//鏡頭控制
+
+		}
+
+		function putEyetoArray(mesh, leftEye){
+			for ( let i = 0, bones = mesh.skeleton.bones; i < bones.length; i ++ ) {
+				if(leftEye){
+					if ( "左目" === bones[ i ].name ){
+						return bones[ i ];
+					}
+				}
+				else{
+					if ( "右目" === bones[ i ].name ){
+						return bones[ i ];
+					}
+				}
+			}
+		}
+
+		function getWorldPosition(bone){
+			return bone.getWorldPosition(new THREE.Vector3());
+		}
+
+		function onWindowResize(){
+			// console.log(eyeArray[modelIndex][0].children[0]);
+			onWindowResizeLeftWindow(getWorldPosition(eyeArray[modelIndex][0].children[0]));
+			onWindowResizeRightWindow(eyeOffset[modelIndex][1]);
+		}
+
+		function onWindowResizeRightWindow(eyeOffset) {
+
+			SCREEN_WIDTH = window.innerWidth;
+			SCREEN_HEIGHT = window.innerHeight;
+			aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+
+			// let offsetX = 0, offsetY = 8.5;
+
+			effect.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+			camera2.left = 0.25 * frustumSize * aspect / - 2 + eyeOffset.x;
+			camera2.right = 0.25 * frustumSize * aspect / 2 + eyeOffset.x;
+			camera2.top = 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera2.bottom = - 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera2.updateProjectionMatrix();
+
+			camera3.left = 0.25 * frustumSize * aspect / - 2 + eyeOffset.x;
+			camera3.right = 0.25 * frustumSize * aspect / 2 + eyeOffset.x;
+			camera3.top = 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera3.bottom = - 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera3.updateProjectionMatrix();
+
+			camera4.left = 0.25 * frustumSize * aspect / - 2 + eyeOffset.x;
+			camera4.right = 0.25 * frustumSize * aspect / 2 + eyeOffset.x;
+			camera4.top = 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera4.bottom = - 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera4.updateProjectionMatrix();
+
+			camera5.left = 0.25 * frustumSize * aspect / - 2 + eyeOffset.x;
+			camera5.right = 0.25 * frustumSize * aspect / 2 + eyeOffset.x;
+			camera5.top = 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera5.bottom = - 0.5 * frustumSize / 2 + eyeOffset.y;
+			camera5.updateProjectionMatrix();
+		}
+
+
+		function onWindowResizeLeftWindow(eyeOffset) {
+			SCREEN_WIDTH = window.innerWidth;
+			SCREEN_HEIGHT = window.innerHeight;
+			aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+
+			effect.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+			
+			let leftFrustumSize = 1;
+
+			camera.left = 0.5 * leftFrustumSize * aspect / - 2 + eyeOffset.x;
+			camera.right = 0.5 * leftFrustumSize * aspect / 2 + eyeOffset.x;
+			camera.top = leftFrustumSize / 2 + eyeOffset.y;
+			camera.bottom = - leftFrustumSize / 2 + eyeOffset.y;
+			camera.updateProjectionMatrix();
+		}
+		//
+
+		function animate() {
+
+			requestAnimationFrame(animate);
+			render();
+
+		}
+
+		function render() {
+
+			effect.clear();
+
+			effect.setViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT);
+			effect.render(leftScene, camera);
+
+			effect.setViewport(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(sceneArray[modelIndex][0], camera2);
+
+			effect.setViewport(SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(sceneArray[modelIndex][1], camera3);
+
+			effect.setViewport(SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(sceneArray[modelIndex][2], camera4);
+
+			effect.setViewport(SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4, 0, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(sceneArray[modelIndex][3], camera5);
+		}
+
+		function onDocumentKeyDown(event) {
+			var keyCode = event.key;
+			if (keyCode == 'e') {//keyE
+				let scale = 800;
+				let offset = new THREE.Vector2(0.5,8.2);
+				camera.left = window.innerWidth / scale / - 2 + offset.x;
+				camera.right = window.innerWidth / scale / 2 + offset.x;
+				camera.top = window.innerHeight / scale / 2 + offset.y;
+				camera.bottom = window.innerHeight / scale / - 2 + offset.y;
+				camera.updateProjectionMatrix();
+
+				effect.setSize(window.innerWidth, window.innerHeight);
+			}else if (keyCode == 'd') {//keyA
+				saveLinePositionToJson();//更新Json資料
+				// removeModel();
+				if (modelIndex == 2) modelIndex = 0
+				else modelIndex += 1;
+				//console.log(modelIndex);
+				// changeModel();
+				leftScene = sceneArray[modelIndex][0];
+				onWindowResize();
+				eyeIndex = 0;
+				createLabels();				
+				labelArray[modelIndex].show(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+			}else if (keyCode == 'a') {//keyD
+				saveLinePositionToJson();//更新Json資料
+				// removeModel();
+				if (modelIndex == 0) modelIndex = 2
+				else modelIndex -= 1;
+				//console.log(modelIndex);
+				// changeModel();
+				leftScene = sceneArray[modelIndex][0];
+				onWindowResize();
+				eyeIndex = 0;
+				createLabels();
+				labelArray[modelIndex].show(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+			}else if (keyCode == '1') {//Digit1
+				// if(!isLineExist){
+				// 	eye = new Eye(scene, intersects, pointZ, true, 0);//Line.name = 0
+				// }else{
+				// 	removeSingleLine(0);				//remove Line.name = 0
+				// 	eye = new Eye(scene, intersects, pointZ, true, 0);//Line.name = 0
+				// }
+				labelArray[modelIndex].remove(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+				if (eyeIndex == 0) eyeIndex = 7
+				else eyeIndex -= 1;
+				//console.log(eyeArray[modelIndex][eyeIndex].children[0]);
+				leftScene = sceneArray[modelIndex][Math.floor(eyeIndex/2)];
+				//console.log(leftScene);
+				onWindowResizeLeftWindow(getWorldPosition(eyeArray[modelIndex][eyeIndex].children[0]));
+				labelArray[modelIndex].show(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+			}else if (keyCode == '2') {//Digit2
+				// if(!isLineExist){
+				// 	eye = new Eye(scene, intersects, pointZ, false, 1);
+				// }else{
+				// 	removeSingleLine(1);
+				// 	eye = new Eye(scene, intersects, pointZ, false, 1);
+				// }
+				labelArray[modelIndex].remove(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+				if (eyeIndex == 7) eyeIndex = 0
+				else eyeIndex += 1;
+				leftScene = sceneArray[modelIndex][Math.floor(eyeIndex/2)];
+				console.log(leftScene);
+				labelArray[modelIndex].show(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+				onWindowResizeLeftWindow(getWorldPosition(eyeArray[modelIndex][eyeIndex].children[0]));
+			}else if(keyCode == 'q'){//keyQ
+				switch(eyeIndex){
+					case 0:
+						eyeArray[modelIndex][1].rotation.x = eyeArray[modelIndex][0].rotation.x;
+						break;
+					case 1:
+						eyeArray[modelIndex][0].rotation.x = eyeArray[modelIndex][1].rotation.x;
+						break;
+					case 2:
+						eyeArray[modelIndex][3].rotation.x = eyeArray[modelIndex][2].rotation.x;
+						break;
+					case 3:
+						eyeArray[modelIndex][2].rotation.x = eyeArray[modelIndex][3].rotation.x;
+						break;
+					case 4:
+						eyeArray[modelIndex][7].rotation.y = -eyeArray[modelIndex][4].rotation.y;
+						break;
+					case 5:
+						eyeArray[modelIndex][6].rotation.y = -eyeArray[modelIndex][5].rotation.y;
+						break;
+					case 6:
+						eyeArray[modelIndex][5].rotation.y = -eyeArray[modelIndex][6].rotation.y;
+						break;
+					case 7:
+						eyeArray[modelIndex][4].rotation.y = -eyeArray[modelIndex][7].rotation.y;
+						break;
+				}
+			}else if (keyCode == 's') {//keyS
+				saveLinePositionToJson();//更新Json資料
+				downloadJsonPutput();
+			}else if (keyCode == 'l') {//keyL upload json file
+				
+				var input = document.createElement('input');
+				input.type = 'file';
+				input.setAttribute('accept', 'application/json')
+				input.click();
+				input.onchange = function(event) {
+					var fileList = input.files;
+					var fr=new FileReader();
+					fr.onload=function(){
+						loadedmodelJSON = JSON.parse(fr.result);
+						co();
+					}
+					fr.readAsText(fileList[0]);
+				}
+			}
+		}
+		
+		function mouseDown(e){
+			// console.log(e);
+			// console.log(e.clientX);
+			// console.log(e.clientY);
+			if(e.buttons == '1'){
+				isMouseDown = true;
+				clientCoordinate[0] = e.clientX;
+				clientCoordinate[1] = e.clientY;
+			}
+			else if(e.buttons == '2'){
+				isMouseDown = false;
+				clientCoordinate[0] = 0;
+				clientCoordinate[1] = 0;
+			}
+			console.log("isDown", isMouseDown);
+			console.log("coordinate", clientCoordinate);
+		}
+
+		function mouseMove(e){
+			if(isMouseDown){
+				// Math.abs(clientCoordinate[0] - e.clientX);
+				// Math.abs(clientCoordinate[1] - e.clientY);
+				if(eyeIndex < 4){
+					eyeArray[modelIndex][eyeIndex].rotation.x = -(clientCoordinate[1] - e.clientY) / 100; //沿著y軸動
+				}
+				else{
+					eyeArray[modelIndex][eyeIndex].rotation.y = -(clientCoordinate[0] - e.clientX) / 100; //沿著x軸動
+				}
+				console.log("eye", eyeIndex);
+			}
+
+			
+		}
+
+		function parseJsonFindtheMinMax(compareArray){
+			let max = compareArray[0];
+			let min = compareArray[0];
+
+			for(let i = 1; i < 4; i++){
+				if(compareArray[i] > max) max = compareArray[i];
+			}
+
+			for(let i = 1; i < 4; i++){
+				if(compareArray[i] < min) min = compareArray[i];
+			}
+
+			return [min, max];
+		}
+
+		function co(){
+			//console.log(loadedmodelJSON[0]);
+
+			let json = loadedmodelJSON[0];
+			jsonModelMinMaxArray[0][0] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[0];
+			jsonModelMinMaxArray[0][1] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[1];
+			jsonModelMinMaxArray[0][2] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[0];
+			jsonModelMinMaxArray[0][3] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[1];
+
+			json = loadedmodelJSON[1];
+			jsonModelMinMaxArray[1][0] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[0];
+			jsonModelMinMaxArray[1][1] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[1];
+			jsonModelMinMaxArray[1][2] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[0];
+			jsonModelMinMaxArray[1][3] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[1];
+
+			json = loadedmodelJSON[2];
+			jsonModelMinMaxArray[2][0] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[0];
+			jsonModelMinMaxArray[2][1] = parseJsonFindtheMinMax([json.line_locationx_1, json.line_locationx_2, json.line_locationx_3, json.line_locationx_4])[1];
+			jsonModelMinMaxArray[2][2] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[0];
+			jsonModelMinMaxArray[2][3] = parseJsonFindtheMinMax([json.line_locationy_1, json.line_locationy_2, json.line_locationy_3, json.line_locationy_4])[1];
+		
+			console.log(jsonModelMinMaxArray);
+			createLabels();
+		}
+
+		function createLabels(){
+			labelArray[modelIndex] = new Labels(jsonModelMinMaxArray[modelIndex][0], jsonModelMinMaxArray[modelIndex][2], jsonModelMinMaxArray[modelIndex][1], jsonModelMinMaxArray[modelIndex][3], eyeIndex);
+			labelArray[modelIndex].show(sceneArray[modelIndex][Math.floor(eyeIndex/2)], eyeIndex);
+		}
+
+
+		function removeModel(){
+			//removeAllLine();
+			scene.remove(modelArray[modelIndex][0]);
+			scene1.remove(modelArray[modelIndex][1]);
+			scene2.remove(modelArray[modelIndex][2]);
+			scene3.remove(modelArray[modelIndex][3]);
+			console.log(scene.children);
+		}
+
+		function changeModel(){
+			scene.add(modelArray[modelIndex][0]);0
+			scene1.add(modelArray[modelIndex][1]);
+			scene2.add(modelArray[modelIndex][2]);
+			scene3.add(modelArray[modelIndex][3]);
+		}
+
+		function removeAllLine(){
+			for(let i = scene.children.length-1; i >= 0; i--){
+				if(scene.children[i].type == 'Line'){
+					let obj = scene.children[i];
+					scene.remove(obj);
+				}
+			}
+		}
+
+		function loadJson(){
+			var lodaer = new THREE.ObjectLoader();
+
+			loader.load(
+				"model_data.json",
+
+				function ( obj ) {
+					// Add the loaded object to the scene
+					scene.add( obj );
+				},
+
+				// onProgress callback
+				function ( xhr ) {
+					console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+				},
+
+				// onError callback
+				function ( err ) {
+					console.error( 'An error happened' );
+				}
+			);
+
+			console.log(model);
+		}
+
+		function saveLinePositionToJson(){
+			//console.log( JSON.stringify({ leftEye: leftEyeArray, rightEye: rightEyeArray }));
+
+			// let eyePosition = eye.getLeftEyePoints();
+
+			// console.log(JSON.stringify({ leftEye: eyePosition}))
+
+			let text = {
+				location:modelFile[modelIndex], 
+				// line_locationx_1:eyePosition[0][0],
+				// line_locationy_1:eyePosition[0][1],
+				// line_locationx_2:eyePosition[1][0],
+				// line_locationy_2:eyePosition[1][1],
+				// line_locationx_3:eyePosition[2][0],
+				// line_locationy_3:eyePosition[2][1],
+				// line_locationx_4:eyePosition[3][0],
+				// line_locationy_4:eyePosition[3][1],
+				Right_X_negative_angle: eyeArray[modelIndex][0].rotation.x, Left_X_negative_angle: eyeArray[modelIndex][1].rotation.x,
+				Right_X_positive_angle: eyeArray[modelIndex][2].rotation.x, Left_X_positive_angle: eyeArray[modelIndex][3].rotation.x,
+				Right_Y_negative_angle: eyeArray[modelIndex][4].rotation.y, Left_Y_negative_angle: eyeArray[modelIndex][5].rotation.y,
+				Right_Y_positive_angle: eyeArray[modelIndex][6].rotation.y, Left_Y_positive_angle: eyeArray[modelIndex][7].rotation.y
+
+			}
+
+			output[modelIndex] = text;
+
+			console.log(output);
+		}
+
+		function downloadJsonPutput(){//outputjson
+			//console.log( JSON.stringify({ leftEye: leftEyeArray, rightEye: rightEyeArray }));
+
+			const a = document.createElement("a");
+			a.href = URL.createObjectURL(new Blob([JSON.stringify(output, null, 4)], {
+				type: "text/plain"
+			}));
+			a.setAttribute("download", "model_result.json");
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+		}
+
+	</script>
+
+</body>
+
+</html>
