@@ -1,35 +1,35 @@
 [
     {
         "location": "models/mmd/kizunaai/kizunaai.pmx",
-        "Right_X_negative_angle": 0.14,
-        "Left_X_negative_angle": 0.14,
-        "Right_X_positive_angle": -0.12,
-        "Left_X_positive_angle": -0.12,
-        "Right_Y_negative_angle": 0.25,
-        "Left_Y_negative_angle": -0.13,
-        "Right_Y_positive_angle": 0.13,
-        "Left_Y_positive_angle": -0.25
+        "Right_X_negative_angle": -11.459155902616466,
+        "Left_X_negative_angle": -11.459155902616466,
+        "Right_X_positive_angle": 8.594366926962348,
+        "Left_X_positive_angle": 8.594366926962348,
+        "Right_Y_negative_angle": 8.021409131831525,
+        "Left_Y_negative_angle": 13.178029288008934,
+        "Right_Y_positive_angle": -13.178029288008934,
+        "Left_Y_positive_angle": -8.021409131831525
     },
     {
         "location": "models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx",
-        "Right_X_negative_angle": -0.2,
-        "Left_X_negative_angle": -0.2,
-        "Right_X_positive_angle": 0.17,
-        "Left_X_positive_angle": 0.17,
-        "Right_Y_negative_angle": -0.09,
-        "Left_Y_negative_angle": -0.14,
-        "Right_Y_positive_angle": 0.14,
-        "Left_Y_positive_angle": 0.09
+        "Right_X_negative_angle": 16.615776058793873,
+        "Left_X_negative_angle": 16.615776058793873,
+        "Right_X_positive_angle": -13.178029288008934,
+        "Left_X_positive_angle": -13.178029288008934,
+        "Right_Y_negative_angle": -25.783100780887047,
+        "Left_Y_negative_angle": -18.907607239317166,
+        "Right_Y_positive_angle": 18.907607239317166,
+        "Left_Y_positive_angle": 25.783100780887047
     },
     {
         "location": "models/mmd/るいのれ式物述有栖_配布用フォルダ/物述有栖.pmx",
-        "Right_X_negative_angle": -0.25,
-        "Left_X_negative_angle": -0.25,
-        "Right_X_positive_angle": 0.34,
-        "Left_X_positive_angle": 0.34,
-        "Right_Y_negative_angle": -0.24,
-        "Left_Y_negative_angle": -0.17,
-        "Right_Y_positive_angle": 0.17,
-        "Left_Y_positive_angle": 0.24
+        "Right_X_negative_angle": -16.04281826366305,
+        "Left_X_negative_angle": -16.04281826366305,
+        "Right_X_positive_angle": 6.875493541569878,
+        "Left_X_positive_angle": 6.875493541569878,
+        "Right_Y_negative_angle": 10.886198107485642,
+        "Left_Y_negative_angle": 12.60507149287811,
+        "Right_Y_positive_angle": -12.60507149287811,
+        "Left_Y_positive_angle": -10.886198107485642
     }
 ]
